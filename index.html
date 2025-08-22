@@ -1,143 +1,115 @@
-<!doctype html>
-<html lang="zh-Hant">
+<!DOCTYPE html>
+<html lang="zh-TW">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>手機定位地圖</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>地圖定位</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    html, body { height: 100%; margin: 0; }
-    #map { position: absolute; inset: 0; }
-    .topbar {
-      position: fixed; left: 0; right: 0; top: 0; height: 56px;
-      display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem;
-      background: rgba(0,0,0,.65); color: #fff; backdrop-filter: blur(8px);
-      z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
     }
-    .sliderbar {
-      position: absolute; bottom: 20px; right: 20px;
-      background: rgba(255,255,255,0.8);
-      border-radius: 12px; padding: 8px 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      z-index: 1000; display: flex; align-items: center;
+    #map {
+      width: 100%;
+      height: 100%;
     }
-    .sliderbar input[type="range"] {
-      width: 120px;
+
+    /* 懸浮滑桿設計 */
+    #zoomControl {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.4); /* 半透明背景 */
+      padding: 10px 0;
+      display: flex;
+      justify-content: center;
+      z-index: 1000;
     }
-    .title { font-weight: 700; }
-    .spacer { flex: 1; }
-    button {
-      height: 36px; border: 0; padding: 0 .9rem; border-radius: 999px; cursor: pointer;
-      box-shadow: 0 2px 6px rgba(0,0,0,.25); font-weight: 600;
+
+    #zoomSlider {
+      width: 90%;  /* 滑桿接近全寬 */
+      height: 30px; /* 增加高度 */
+      -webkit-appearance: none;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 15px;
+      outline: none;
     }
-    .primary { background: #4f46e5; color: #fff; }
-    .ghost { background: #fff; }
-    .status { font-size: .9rem; opacity: .9; }
+
+    #zoomSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 30px;
+      height: 30px;
+      background: #007bff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    #zoomSlider::-moz-range-thumb {
+      width: 30px;
+      height: 30px;
+      background: #007bff;
+      border-radius: 50%;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <div class="title">📍 手機定位地圖</div>
-    <div class="status" id="status">初始化中…</div>
-    <div class="spacer"></div>
-    <button id="recenter" class="ghost">回到我</button>
-    <button id="start" class="primary">啟動定位</button>
-  </div>
   <div id="map"></div>
-  <div class="sliderbar">
+
+  <!-- 懸浮滑桿 -->
+  <div id="zoomControl">
     <input type="range" id="zoomSlider" min="1" max="19" />
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const DEFAULT_ZOOM = 14; // ✅ 預設縮放
-    let map, meMarker, accCircle, watchId = null, following = true;
-    const statusEl = document.getElementById('status');
-    const btnStart = document.getElementById('start');
-    const btnRecenter = document.getElementById('recenter');
-    const zoomSlider = document.getElementById('zoomSlider');
+    // 用一個變數設定預設縮放
+    const defaultZoom = 12;
 
-    zoomSlider.value = DEFAULT_ZOOM;
+    let map;
 
-    function setStatus(msg) { statusEl.textContent = msg; }
+    function initMap(lat = 23.6978, lng = 120.9605, zoom = defaultZoom) {
+      map = L.map('map').setView([lat, lng], zoom);
 
-    function initMap(lat = 23.6978, lng = 120.9605, zoom = DEFAULT_ZOOM) {
-      if (map) return;
-      map = L.map('map');
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap 貢獻者'
       }).addTo(map);
-      map.setView([lat, lng], zoom);
 
-      meMarker = L.marker([lat, lng], { title: '我的位置' }).addTo(map);
-      accCircle = L.circle([lat, lng], { radius: 0 }).addTo(map);
+      // 取得滑桿並設定預設值
+      const zoomSlider = document.getElementById('zoomSlider');
+      zoomSlider.value = defaultZoom;
 
-      map.on('dragstart', () => { following = false; });
-      map.on('zoomend', () => { zoomSlider.value = map.getZoom(); });
-    }
-
-    function updateMe(pos) {
-      const { latitude, longitude, accuracy } = pos.coords;
-      const latlng = [latitude, longitude];
-      meMarker.setLatLng(latlng);
-      accCircle.setLatLng(latlng).setRadius(accuracy || 0);
-      if (following) map.setView(latlng);
-      setStatus(`已定位：${latitude.toFixed(6)}, ${longitude.toFixed(6)}（精度 ±${Math.round(accuracy)} m）`);
-    }
-
-    function onGeoError(err) {
-      let msg = '定位失敗。';
-      switch (err.code) {
-        case err.PERMISSION_DENIED: msg += ' 請允許此網站存取定位。'; break;
-        case err.POSITION_UNAVAILABLE: msg += ' 無法取得定位服務。'; break;
-        case err.TIMEOUT: msg += ' 定位逾時，請重試。'; break;
-        default: msg += ' 未知錯誤。';
-      }
-      setStatus(msg);
-    }
-
-    function startGeolocation() {
-      if (!('geolocation' in navigator)) {
-        setStatus('此裝置/瀏覽器不支援定位。');
-        return;
-      }
-      setStatus('定位中…');
-      navigator.geolocation.getCurrentPosition((pos) => {
-        const { latitude, longitude } = pos.coords;
-        initMap(latitude, longitude, DEFAULT_ZOOM);
-        updateMe(pos);
-      }, (err) => {
-        initMap();
-        onGeoError(err);
-      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
-
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      watchId = navigator.geolocation.watchPosition(updateMe, onGeoError, {
-        enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 20000
+      // 當滑桿變動時更新地圖縮放
+      zoomSlider.addEventListener('input', function () {
+        map.setZoom(parseInt(this.value));
       });
+
+      // 地圖縮放時同步滑桿
+      map.on('zoomend', function () {
+        zoomSlider.value = map.getZoom();
+      });
+
+      // 嘗試獲取使用者位置
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const userLat = position.coords.latitude;
+            const userLng = position.coords.longitude;
+            map.setView([userLat, userLng], defaultZoom);
+            L.marker([userLat, userLng]).addTo(map).bindPopup('你在這裡').openPopup();
+          },
+          (error) => {
+            console.error('定位失敗:', error);
+          }
+        );
+      }
     }
 
-    btnStart.addEventListener('click', () => {
-      following = true;
-      startGeolocation();
-    });
-
-    btnRecenter.addEventListener('click', () => {
-      following = true;
-      if (meMarker) map.setView(meMarker.getLatLng());
-    });
-
-    zoomSlider.addEventListener('input', () => {
-      if (map) map.setZoom(Number(zoomSlider.value));
-    });
-
-    window.addEventListener('load', () => {
-      initMap();
-      startGeolocation();
-    });
+    initMap();
   </script>
 </body>
 </html>
