@@ -21,27 +21,30 @@
   }
   #map { width: 100%; height: 100vh; }
 
-  /* 懸浮滑桿樣式 */
+  /* 滑桿容器 */
   .slider-container {
     position: absolute;
     top: 10px;
     left: 0;
     width: 100%;
-    padding: 10px 0;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0,0,0,0.3);
+    padding: 8px 0;
     z-index: 1000;
+    box-sizing: border-box;
   }
+
+  /* 滑桿 */
   #zoomSlider {
     width: 80%;
+    max-width: 600px;   /* 防止超寬 */
     height: 40px;
     -webkit-appearance: none;
     background: rgba(255,255,255,0.4);
     border-radius: 15px;
     outline: none;
-    margin-right: 10px;
   }
   #zoomSlider::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -59,11 +62,21 @@
     border-radius: 50%;
     cursor: pointer;
   }
+
+  /* 縮放數字 */
   #zoomValue {
     color: #fff;
     font-weight: bold;
+    margin-left: 10px;
     min-width: 30px;
     text-align: center;
+    font-size: 1.1rem;
+  }
+
+  /* 響應式調整 */
+  @media (max-width: 400px) {
+    #zoomSlider { width: 90%; }
+    #zoomValue { font-size: 1rem; }
   }
 </style>
 </head>
@@ -71,9 +84,9 @@
 
 <div id="map"></div>
 
-<!-- 懸浮滑桿 + 顯示縮放數字 -->
+<!-- 滑桿 + 縮放數字 -->
 <div class="slider-container">
-  <input type="range" id="zoomSlider" min="1" max="19" />
+  <input type="range" id="zoomSlider" min="1" max="19">
   <span id="zoomValue">12</span>
 </div>
 
@@ -81,10 +94,9 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-  // === 全域設定 ===
   const DEFAULT_LAT = 23.6978;    // 台灣中心
   const DEFAULT_LNG = 120.9605;
-  const DEFAULT_ZOOM = 12;        // 預設縮放
+  const DEFAULT_ZOOM = 12;
 
   let map, marker;
 
@@ -103,25 +115,24 @@
     const zoomSlider = document.getElementById('zoomSlider');
     const zoomValue = document.getElementById('zoomValue');
 
-    // 初始化滑桿和文字
     zoomSlider.value = zoom;
     zoomValue.textContent = zoom;
 
-    // 滑桿拖動更新地圖和數字
+    // 滑桿拖動
     zoomSlider.addEventListener('input', () => {
       const val = parseInt(zoomSlider.value);
       map.setZoom(val);
       zoomValue.textContent = val;
     });
 
-    // 地圖縮放更新滑桿和數字
+    // 地圖縮放同步滑桿和數字
     map.on('zoomend', () => {
       const val = map.getZoom();
       zoomSlider.value = val;
       zoomValue.textContent = val;
     });
 
-    // 嘗試獲取定位
+    // 自動定位
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(pos => {
         const { latitude, longitude } = pos.coords;
