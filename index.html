@@ -11,6 +11,7 @@
 html, body { margin:0; padding:0; height:100%; }
 #map { width:100%; height:100vh; }
 
+/* 滑桿容器 */
 .slider-container {
   position: absolute;
   top: 10px;
@@ -59,9 +60,27 @@ html, body { margin:0; padding:0; height:100%; }
   font-size: 1.1rem;
 }
 
-@media (max-width: 400px) {
-  #zoomSlider { width: 90%; }
-  #zoomValue { font-size: 1rem; }
+/* 標記控制面板 */
+.marker-panel {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  padding: 8px;
+  border-radius: 10px;
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.marker-panel select, .marker-panel input {
+  padding: 4px 6px;
+  border-radius: 5px;
+  border: none;
+  font-size: 1rem;
 }
 </style>
 </head>
@@ -69,43 +88,53 @@ html, body { margin:0; padding:0; height:100%; }
 
 <div id="map"></div>
 
+<!-- 滑桿 -->
 <div class="slider-container">
   <input type="range" id="zoomSlider" min="1" max="19">
   <span id="zoomValue">12</span>
 </div>
 
+<!-- 標記控制面板 -->
+<div class="marker-panel">
+  <label for="markerColor">顏色:</label>
+  <select id="markerColor">
+    <option value="red">紅</option>
+    <option value="blue">藍</option>
+    <option value="green">綠</option>
+    <option value="orange">橙</option>
+    <option value="violet">紫</option>
+  </select>
+  <label for="markerName">名稱:</label>
+  <input type="text" id="markerName" placeholder="輸入名稱">
+</div>
+
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-// 初始位置
+// 初始設定
 const DEFAULT_LAT = 23.6978;
 const DEFAULT_LNG = 120.9605;
 const DEFAULT_ZOOM = 12;
 
 let map, marker;
 
-// 彩色圖標清單
-const iconUrls = [
-  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
-  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
-  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
-  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
-  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png'
-];
+// 顏色圖標對應
+const iconMap = {
+  red: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  blue: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  green: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+  orange: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+  violet: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png'
+};
 
-function createIcon(url) {
+function createIcon(color) {
   return new L.Icon({
-    iconUrl: url,
+    iconUrl: iconMap[color],
     shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41],
     popupAnchor: [1, -34],
     shadowSize: [41, 41]
   });
-}
-
-function getRandomIcon() {
-  const url = iconUrls[Math.floor(Math.random()*iconUrls.length)];
-  return createIcon(url);
 }
 
 function initMap() {
@@ -117,7 +146,7 @@ function initMap() {
   }).addTo(map);
 
   // 預設位置標記
-  marker = L.marker([DEFAULT_LAT, DEFAULT_LNG], {icon: getRandomIcon()})
+  marker = L.marker([DEFAULT_LAT, DEFAULT_LNG], {icon: createIcon('blue')})
             .addTo(map)
             .bindPopup('你在這裡')
             .openPopup();
@@ -151,18 +180,18 @@ function initMap() {
     });
   }
 
-  // 長按標記地點
+  // 長按新增標記
   let pressTimer;
   const longPressDuration = 800; // 800ms
+
   map.on('mousedown touchstart', function(e) {
     pressTimer = setTimeout(() => {
-      const name = prompt("請輸入標記名稱：", "新標記");
-      if (name) {
-        L.marker(e.latlng, {icon: getRandomIcon()})
-          .addTo(map)
-          .bindPopup(`${name}<br>Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`)
-          .openPopup();
-      }
+      const nameInput = document.getElementById('markerName').value || '新標記';
+      const colorSelect = document.getElementById('markerColor').value || 'red';
+      L.marker(e.latlng, {icon: createIcon(colorSelect)})
+        .addTo(map)
+        .bindPopup(`${nameInput}<br>Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`)
+        .openPopup();
     }, longPressDuration);
   }).on('mouseup touchend', function(e) {
     clearTimeout(pressTimer);
