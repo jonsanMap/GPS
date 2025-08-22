@@ -5,12 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>手機定位地圖</title>
 
-<!-- 防止快取 -->
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-<meta http-equiv="Pragma" content="no-cache" />
-<meta http-equiv="Expires" content="0" />
-
-<!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
 <style>
@@ -82,14 +76,39 @@ html, body { margin:0; padding:0; height:100%; }
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
+// 初始位置
 const DEFAULT_LAT = 23.6978;
 const DEFAULT_LNG = 120.9605;
 const DEFAULT_ZOOM = 12;
 
 let map, marker;
 
+// 彩色圖標清單
+const iconUrls = [
+  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+  'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png'
+];
+
+function createIcon(url) {
+  return new L.Icon({
+    iconUrl: url,
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41]
+  });
+}
+
+function getRandomIcon() {
+  const url = iconUrls[Math.floor(Math.random()*iconUrls.length)];
+  return createIcon(url);
+}
+
 function initMap() {
-  // 初始化地圖
   map = L.map('map').setView([DEFAULT_LAT, DEFAULT_LNG], DEFAULT_ZOOM);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -97,8 +116,9 @@ function initMap() {
     attribution: '&copy; OpenStreetMap'
   }).addTo(map);
 
-  // 標記預設位置
-  marker = L.marker([DEFAULT_LAT, DEFAULT_LNG]).addTo(map)
+  // 預設位置標記
+  marker = L.marker([DEFAULT_LAT, DEFAULT_LNG], {icon: getRandomIcon()})
+            .addTo(map)
             .bindPopup('你在這裡')
             .openPopup();
 
@@ -108,14 +128,12 @@ function initMap() {
   zoomSlider.value = DEFAULT_ZOOM;
   zoomValue.textContent = DEFAULT_ZOOM;
 
-  // 滑桿控制縮放
   zoomSlider.addEventListener('input', () => {
     const val = parseInt(zoomSlider.value);
     map.setZoom(val);
     zoomValue.textContent = val;
   });
 
-  // 地圖縮放同步滑桿和數字
   map.on('zoomend', () => {
     const val = map.getZoom();
     zoomSlider.value = val;
@@ -135,16 +153,19 @@ function initMap() {
 
   // 長按標記地點
   let pressTimer;
-  const longPressDuration = 800; // 800ms 長按
-
+  const longPressDuration = 800; // 800ms
   map.on('mousedown touchstart', function(e) {
     pressTimer = setTimeout(() => {
-      L.marker(e.latlng).addTo(map)
-        .bindPopup(`標記位置:<br>Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`)
-        .openPopup();
+      const name = prompt("請輸入標記名稱：", "新標記");
+      if (name) {
+        L.marker(e.latlng, {icon: getRandomIcon()})
+          .addTo(map)
+          .bindPopup(`${name}<br>Lat: ${e.latlng.lat.toFixed(5)}, Lng: ${e.latlng.lng.toFixed(5)}`)
+          .openPopup();
+      }
     }, longPressDuration);
   }).on('mouseup touchend', function(e) {
-    clearTimeout(pressTimer); // 放開或短按取消長按
+    clearTimeout(pressTimer);
   });
 }
 
