@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>地圖標記管理 + 軌跡記錄</title>
+<title>地圖標記管理 + 軌跡記錄 + GPX</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
 html, body { margin:0; padding:0; height:100%; }
@@ -93,10 +93,16 @@ html, body { margin:0; padding:0; height:100%; }
     <label for="markerName">名稱:</label>
     <input type="text" id="markerName" placeholder="輸入名稱">
   </div>
-  <button id="trackBtn" class="track-btn">開始記錄</button>
+  <div class="panel-row">
+    <button id="trackBtn" class="track-btn">開始記錄</button>
+    <button id="saveBtn">存 GPX</button>
+    <input type="file" id="gpxFile" accept=".gpx">
+  </div>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/togeojson@0.16.0"></script>
+
 <script>
 const DEFAULT_LAT = 23.6978;
 const DEFAULT_LNG = 120.9605;
@@ -133,6 +139,7 @@ let watchId = null;
 let trackPolyline = null;
 let trackCoords = [];
 
+// 切換開始/停止記錄
 function toggleTracking() {
   if (!navigator.geolocation) {
     alert("此瀏覽器不支援 GPS 定位");
@@ -140,7 +147,6 @@ function toggleTracking() {
   }
 
   if (!tracking) {
-    // 開始記錄
     tracking = true;
     trackCoords = [];
     trackPolyline = L.polyline([], { color: 'red' }).addTo(map);
@@ -156,14 +162,13 @@ function toggleTracking() {
     }, {
       enableHighAccuracy: true,
       maximumAge: 1000,
-      timeout: 10000
+      timeout: 20000
     });
 
     trackBtn.textContent = "停止記錄";
     trackBtn.classList.add("active");
 
   } else {
-    // 停止記錄
     tracking = false;
     if (watchId !== null) {
       navigator.geolocation.clearWatch(watchId);
@@ -172,6 +177,45 @@ function toggleTracking() {
     trackBtn.textContent = "開始記錄";
     trackBtn.classList.remove("active");
   }
+}
+
+// 匯出 GPX
+function saveGPX() {
+  if (trackCoords.length === 0) {
+    alert("沒有軌跡可存檔！");
+    return;
+  }
+  let gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Leaflet">
+<trk><name>Track</name><trkseg>`;
+  trackCoords.forEach(pt => {
+    gpx += `<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>\n`;
+  });
+  gpx += `</trkseg></trk></gpx>`;
+
+  const blob = new Blob([gpx], { type: "application/gpx+xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "track.gpx";
+  a.click();
+}
+
+// 匯入 GPX
+function loadGPX(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(e.target.result, "text/xml");
+    const geojson = toGeoJSON.gpx(xml);
+    const layer = L.geoJSON(geojson, { style: { color: "blue" } }).addTo(map);
+    // 自動縮放到路徑
+    try {
+      map.fitBounds(layer.getBounds());
+    } catch {}
+  };
+  reader.readAsText(file);
 }
 
 function initMap() {
@@ -220,9 +264,12 @@ function initMap() {
       .addTo(map);
   });
 
-  // 綁定軌跡記錄按鈕
+  // 綁定事件
   trackBtn = document.getElementById("trackBtn");
   trackBtn.addEventListener("click", toggleTracking);
+
+  document.getElementById("saveBtn").addEventListener("click", saveGPX);
+  document.getElementById("gpxFile").addEventListener("change", loadGPX);
 }
 
 window.onload = initMap;
