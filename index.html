@@ -135,19 +135,12 @@ function initMap() {
     });
   }
 
-  // 長按新增標記
-  let pressTimer;
-  const longPressDuration = 800;
-
-  map.on('mousedown touchstart', function(e) {
-    pressTimer = setTimeout(() => {
-      const nameInput = document.getElementById('markerName').value || '新標記';
-      const colorSelect = document.getElementById('markerColor').value || 'red';
-      L.marker(e.latlng, {icon: createIcon(colorSelect, nameInput)})
-        .addTo(map);
-    }, longPressDuration);
-  }).on('mouseup touchend', function(e) {
-    clearTimeout(pressTimer);
+  // 使用 Leaflet 內建 contextmenu（桌機右鍵 + 手機長按）
+  map.on('contextmenu', function(e) {
+    const nameInput = document.getElementById('markerName').value || '新標記';
+    const colorSelect = document.getElementById('markerColor').value || 'red';
+    L.marker(e.latlng, {icon: createIcon(colorSelect, nameInput)})
+      .addTo(map);
   });
 }
 
