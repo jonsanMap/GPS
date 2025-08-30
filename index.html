@@ -38,10 +38,17 @@ html, body { margin:0; padding:0; height:100%; }
   border-radius: 10px;
   z-index: 1000;
   display: flex;
+  flex-direction: column; /* 垂直排列 */
+  gap: 6px;
+  align-items: center;
+}
+
+.panel-row {
+  display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: wrap; /* 手機太窄時自動換行 */
 }
+
 .marker-panel select, 
 .marker-panel input, 
 .marker-panel button { 
@@ -57,6 +64,7 @@ html, body { margin:0; padding:0; height:100%; }
   background:#28a745; 
   color:#fff; 
   cursor:pointer;
+  width: 120px; /* 固定寬度 */
 }
 .track-btn.active {
   background:#dc3545; /* 紅色表示停止狀態 */
@@ -73,16 +81,18 @@ html, body { margin:0; padding:0; height:100%; }
 </div>
 
 <div class="marker-panel">
-  <label for="markerColor">顏色:</label>
-  <select id="markerColor">
-    <option value="red">紅</option>
-    <option value="blue">藍</option>
-    <option value="green">綠</option>
-    <option value="orange">橙</option>
-    <option value="violet">紫</option>
-  </select>
-  <label for="markerName">名稱:</label>
-  <input type="text" id="markerName" placeholder="輸入名稱">
+  <div class="panel-row">
+    <label for="markerColor">顏色:</label>
+    <select id="markerColor">
+      <option value="red">紅</option>
+      <option value="blue">藍</option>
+      <option value="green">綠</option>
+      <option value="orange">橙</option>
+      <option value="violet">紫</option>
+    </select>
+    <label for="markerName">名稱:</label>
+    <input type="text" id="markerName" placeholder="輸入名稱">
+  </div>
   <button id="trackBtn" class="track-btn">開始記錄</button>
 </div>
 
@@ -104,13 +114,12 @@ const iconMap = {
 };
 
 function createIcon(color, name) {
-  // 使用 DivIcon 來顯示名稱文字
   return L.divIcon({
     html: `<div style="text-align:center;">
             <img src="${iconMap[color]}" style="display:block; margin:0 auto;">
             <span style="color:${color}; font-weight:bold;">${name}</span>
            </div>`,
-    className: '', // 清空預設 className
+    className: '',
     iconSize: [40, 50],
     iconAnchor: [20, 41],
     popupAnchor: [0, -41]
@@ -141,7 +150,7 @@ function toggleTracking() {
       const latlng = [latitude, longitude];
       trackCoords.push(latlng);
       trackPolyline.setLatLngs(trackCoords);
-      map.setView(latlng); // 跟隨移動
+      map.setView(latlng);
     }, err => {
       console.warn("GPS 錯誤:", err);
     }, {
@@ -203,7 +212,7 @@ function initMap() {
     });
   }
 
-  // 使用 Leaflet 內建 contextmenu（桌機右鍵 + 手機長按）
+  // contextmenu → 桌機右鍵 / 手機長按
   map.on('contextmenu', function(e) {
     const nameInput = document.getElementById('markerName').value || '新標記';
     const colorSelect = document.getElementById('markerColor').value || 'red';
@@ -221,4 +230,3 @@ window.onload = initMap;
 
 </body>
 </html>
-
