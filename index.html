@@ -2,173 +2,149 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>地圖標記與路徑記錄</title>
+  <title>GPS 地圖紀錄</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    #map { height: 100vh; }
-    .marker-panel {
-      position: absolute;
-      bottom: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.4);
-      color: #fff;
-      padding: 8px;
-      border-radius: 10px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: center;
+    #map { height: 90vh; }
+    #controls {
+      padding: 5px;
+      font-size: 14px;
     }
-    .panel-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex-wrap: nowrap;
+    select, input, button {
+      margin: 3px;
     }
-    .marker-panel select, 
-    .marker-panel input, 
-    .marker-panel button { 
-      padding:4px 6px; 
-      border-radius:5px; 
-      border:none; 
-      font-size:1rem;
-    }
-    #markerName { width: 100px; }
-    .track-btn { background:#28a745; color:#fff; cursor:pointer; }
-    .track-btn.active { background:#dc3545; }
-    .file-btn { background:#007bff; color:#fff; cursor:pointer; }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
-  <div class="marker-panel">
-    <div class="panel-row">
-      <label for="markerColor">顏色:</label>
-      <select id="markerColor">
-        <option value="red">紅</option>
-        <option value="blue">藍</option>
-        <option value="green">綠</option>
-        <option value="orange">橙</option>
-        <option value="violet">紫</option>
+  <div id="controls">
+    <!-- 第一行：標記顏色 + 名稱 -->
+    <label>顏色：
+      <select id="color">
+        <option value="red">紅色</option>
+        <option value="blue">藍色</option>
+        <option value="green">綠色</option>
+        <option value="orange">橘色</option>
+        <option value="purple">紫色</option>
       </select>
-      <label for="markerName">名稱:</label>
+    </label>
+    <label>名稱：
       <input type="text" id="markerName" placeholder="輸入名稱">
-    </div>
-    <div class="panel-row">
-      <button id="trackBtn" class="track-btn">開始記錄</button>
-      <button id="saveBtn" class="file-btn">存檔 GPX</button>
-      <input type="file" id="loadFile" accept=".gpx" style="display:none">
-      <button id="loadBtn" class="file-btn">讀檔 GPX</button>
+    </label>
+    <!-- 第二行：操作按鈕 -->
+    <div>
+      <button onclick="startStopTrack()">開始記錄</button>
+      <button onclick="saveGPX()">存 GPX</button>
+      <input type="file" id="gpxFile" accept=".gpx" onchange="loadGPX(event)">
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    const map = L.map('map').fitWorld();
+  <script src="https://unpkg.com/togeojson@0.16.0"></script>
 
+  <script>
+    let map = L.map('map').setView([23.5, 121], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
+      attribution: '&copy; OpenStreetMap 貢獻者'
     }).addTo(map);
 
-    map.locate({setView: true, maxZoom: 16});
-
-    // 標記顏色
-    const colorIcons = {
-      red: new L.Icon({iconUrl:"https://maps.gstatic.com/mapfiles/ms2/micons/red-dot.png",iconSize:[32,32]}),
-      blue: new L.Icon({iconUrl:"https://maps.gstatic.com/mapfiles/ms2/micons/blue-dot.png",iconSize:[32,32]}),
-      green: new L.Icon({iconUrl:"https://maps.gstatic.com/mapfiles/ms2/micons/green-dot.png",iconSize:[32,32]}),
-      orange: new L.Icon({iconUrl:"https://maps.gstatic.com/mapfiles/ms2/micons/orange-dot.png",iconSize:[32,32]}),
-      violet: new L.Icon({iconUrl:"https://maps.gstatic.com/mapfiles/ms2/micons/purple-dot.png",iconSize:[32,32]})
-    };
-
-    // 點擊新增標記
-    map.on('contextmenu', e => {
-      const color = document.getElementById("markerColor").value;
-      const name = document.getElementById("markerName").value || "未命名";
-      L.marker(e.latlng, {icon: colorIcons[color]}).addTo(map).bindPopup(name).openPopup();
-    });
-
-    // =============== 路徑記錄 ===============
+    let userMarker;
     let tracking = false;
-    let trackPoints = [];
-    let trackLine = null;
+    let currentTrack = [];
+    let trackLayer = L.polyline([], { color: 'blue' }).addTo(map);
 
-    const trackBtn = document.getElementById("trackBtn");
-    trackBtn.addEventListener("click", () => {
+    // ---- 定位 ----
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        pos => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const latlng = [lat, lng];
+
+          if (!userMarker) {
+            userMarker = L.marker(latlng).addTo(map).bindPopup("目前位置");
+            map.setView(latlng, 16);
+          } else {
+            userMarker.setLatLng(latlng);
+          }
+
+          if (tracking) {
+            currentTrack.push(latlng);
+            trackLayer.setLatLngs(currentTrack);
+          }
+        },
+        err => {
+          console.error("定位失敗：", err.message);
+          alert("定位失敗：" + err.message);
+        },
+        {
+          enableHighAccuracy: true,   // 優先用 GPS
+          timeout: 20000,             // 最多等 20 秒
+          maximumAge: 0               // 不要用快取
+        }
+      );
+    } else {
+      alert("此瀏覽器不支援定位功能");
+    }
+
+    // ---- 長按新增標記 ----
+    map.on('contextmenu', function (e) {
+      const color = document.getElementById("color").value;
+      const name = document.getElementById("markerName").value || "標記";
+      const marker = L.circleMarker(e.latlng, {
+        color: color,
+        radius: 8
+      }).addTo(map);
+      marker.bindPopup(`<b>${name}</b>`);
+    });
+
+    // ---- 開始/停止記錄 ----
+    function startStopTrack() {
       tracking = !tracking;
-      if(tracking) {
-        trackPoints = [];
-        if(trackLine) { map.removeLayer(trackLine); trackLine = null; }
-        trackBtn.textContent = "停止記錄";
-        trackBtn.classList.add("active");
+      if (tracking) {
+        currentTrack = [];
+        trackLayer.setLatLngs([]);
+        document.querySelector("button").innerText = "停止記錄";
       } else {
-        trackBtn.textContent = "開始記錄";
-        trackBtn.classList.remove("active");
+        document.querySelector("button").innerText = "開始記錄";
       }
-    });
+    }
 
-    map.on('locationfound', e => {
-      if(tracking) {
-        trackPoints.push([e.latitude, e.longitude]);
-        if(trackLine) map.removeLayer(trackLine);
-        trackLine = L.polyline(trackPoints, {color:"red"}).addTo(map);
+    // ---- 匯出 GPX ----
+    function saveGPX() {
+      if (currentTrack.length === 0) {
+        alert("沒有軌跡可存檔！");
+        return;
       }
-    });
-    map.on('locationerror', e => alert("定位失敗: " + e.message));
-    setInterval(()=>map.locate({setView:false}),5000);
 
-    // =============== 存檔 GPX ===============
-    function saveGPX(points) {
-      if(points.length < 2) { alert("沒有足夠的路徑可存檔"); return; }
       let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Leaflet-GPX" xmlns="http://www.topografix.com/GPX/1/1">
-<trk><name>記錄路徑</name><trkseg>`;
-      points.forEach(p => {
-        gpx += `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>\n`;
+<gpx version="1.1" creator="Leaflet">
+<trk><name>Track</name><trkseg>`;
+      currentTrack.forEach(pt => {
+        gpx += `<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>\n`;
       });
       gpx += `</trkseg></trk></gpx>`;
 
-      const blob = new Blob([gpx], {type: "application/gpx+xml"});
-      const url = URL.createObjectURL(blob);
+      const blob = new Blob([gpx], { type: "application/gpx+xml" });
       const a = document.createElement("a");
-      a.href = url;
+      a.href = URL.createObjectURL(blob);
       a.download = "track.gpx";
       a.click();
-      URL.revokeObjectURL(url);
     }
-    document.getElementById("saveBtn").addEventListener("click", ()=>saveGPX(trackPoints));
 
-    // =============== 讀檔 GPX ===============
-    document.getElementById("loadBtn").addEventListener("click", ()=>{
-      document.getElementById("loadFile").click();
-    });
-    document.getElementById("loadFile").addEventListener("change", function(){
-      const file = this.files[0];
-      if(!file) return;
+    // ---- 匯入 GPX ----
+    function loadGPX(event) {
+      const file = event.target.files[0];
+      if (!file) return;
       const reader = new FileReader();
-      reader.onload = function(e){
-        const text = e.target.result;
+      reader.onload = function (e) {
         const parser = new DOMParser();
-        const xml = parser.parseFromString(text, "application/xml");
-        const trkpts = xml.getElementsByTagName("trkpt");
-        let pts = [];
-        for(let i=0;i<trkpts.length;i++){
-          let lat = parseFloat(trkpts[i].getAttribute("lat"));
-          let lon = parseFloat(trkpts[i].getAttribute("lon"));
-          pts.push([lat,lon]);
-        }
-        if(pts.length>1) {
-          L.polyline(pts, {color:"blue"}).addTo(map);
-          map.fitBounds(pts);
-        } else {
-          alert("GPX 檔沒有有效的路徑");
-        }
+        const xml = parser.parseFromString(e.target.result, "text/xml");
+        const geojson = toGeoJSON.gpx(xml);
+        L.geoJSON(geojson, { style: { color: "red" } }).addTo(map);
       };
       reader.readAsText(file);
-    });
+    }
   </script>
 </body>
 </html>
