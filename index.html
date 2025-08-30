@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>地圖標記管理</title>
+<title>地圖標記管理 + 軌跡記錄</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
 html, body { margin:0; padding:0; height:100%; }
@@ -41,7 +41,20 @@ html, body { margin:0; padding:0; height:100%; }
   gap: 10px;
   align-items: center;
 }
-.marker-panel select, .marker-panel input { padding:4px 6px; border-radius:5px; border:none; font-size:1rem;}
+.marker-panel select, .marker-panel input, .marker-panel button { 
+  padding:4px 6px; 
+  border-radius:5px; 
+  border:none; 
+  font-size:1rem;
+}
+.track-btn {
+  background:#28a745; 
+  color:#fff; 
+  cursor:pointer;
+}
+.track-btn.active {
+  background:#dc3545; /* 紅色表示停止狀態 */
+}
 </style>
 </head>
 <body>
@@ -64,6 +77,7 @@ html, body { margin:0; padding:0; height:100%; }
   </select>
   <label for="markerName">名稱:</label>
   <input type="text" id="markerName" placeholder="輸入名稱">
+  <button id="trackBtn" class="track-btn">開始記錄</button>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -95,6 +109,54 @@ function createIcon(color, name) {
     iconAnchor: [20, 41],
     popupAnchor: [0, -41]
   });
+}
+
+// === 軌跡記錄相關 ===
+let tracking = false;
+let trackBtn;
+let watchId = null;
+let trackPolyline = null;
+let trackCoords = [];
+
+function toggleTracking() {
+  if (!navigator.geolocation) {
+    alert("此瀏覽器不支援 GPS 定位");
+    return;
+  }
+
+  if (!tracking) {
+    // 開始記錄
+    tracking = true;
+    trackCoords = [];
+    trackPolyline = L.polyline([], { color: 'red' }).addTo(map);
+
+    watchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      const latlng = [latitude, longitude];
+      trackCoords.push(latlng);
+      trackPolyline.setLatLngs(trackCoords);
+      map.setView(latlng); // 跟隨移動
+    }, err => {
+      console.warn("GPS 錯誤:", err);
+    }, {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000
+    });
+
+    trackBtn.textContent = "停止記錄";
+    trackBtn.classList.add("active");
+
+  } else {
+    // 停止記錄
+    tracking = false;
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    trackBtn.textContent = "開始記錄";
+    trackBtn.classList.remove("active");
+  }
 }
 
 function initMap() {
@@ -142,6 +204,10 @@ function initMap() {
     L.marker(e.latlng, {icon: createIcon(colorSelect, nameInput)})
       .addTo(map);
   });
+
+  // 綁定軌跡記錄按鈕
+  trackBtn = document.getElementById("trackBtn");
+  trackBtn.addEventListener("click", toggleTracking);
 }
 
 window.onload = initMap;
