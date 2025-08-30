@@ -1,150 +1,232 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <title>GPS 地圖紀錄</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <style>
-    #map { height: 90vh; }
-    #controls {
-      padding: 5px;
-      font-size: 14px;
-    }
-    select, input, button {
-      margin: 3px;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>地圖標記管理 + 軌跡記錄</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+html, body { margin:0; padding:0; height:100%; }
+#map { width:100%; height:100vh; }
+
+.slider-container {
+  position: absolute;
+  top: 10px;
+  left: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0,0,0,0.3);
+  padding: 8px 0;
+  z-index: 1000;
+}
+
+#zoomSlider { width:80%; max-width:600px; height:40px; -webkit-appearance:none; background: rgba(255,255,255,0.4); border-radius:15px; outline:none;}
+#zoomSlider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:35px; height:35px; background:#007bff; border-radius:50%; cursor:pointer;}
+#zoomSlider::-moz-range-thumb { width:35px; height:35px; background:#007bff; border-radius:50%; cursor:pointer;}
+#zoomValue { color:#fff; font-weight:bold; margin-left:10px; min-width:30px; text-align:center; font-size:1.1rem;}
+
+.marker-panel {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  padding: 8px;
+  border-radius: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column; /* 垂直排列 */
+  gap: 6px;
+  align-items: center;
+}
+
+.panel-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.marker-panel select, 
+.marker-panel input, 
+.marker-panel button { 
+  padding:4px 6px; 
+  border-radius:5px; 
+  border:none; 
+  font-size:1rem;
+}
+#markerName {
+  width: 100px;   /* 限制輸入框寬度 */
+}
+.track-btn {
+  background:#28a745; 
+  color:#fff; 
+  cursor:pointer;
+  width: 120px; /* 固定寬度 */
+}
+.track-btn.active {
+  background:#dc3545; /* 紅色表示停止狀態 */
+}
+</style>
 </head>
 <body>
-  <div id="map"></div>
-  <div id="controls">
-    <!-- 第一行：標記顏色 + 名稱 -->
-    <label>顏色：
-      <select id="color">
-        <option value="red">紅色</option>
-        <option value="blue">藍色</option>
-        <option value="green">綠色</option>
-        <option value="orange">橘色</option>
-        <option value="purple">紫色</option>
-      </select>
-    </label>
-    <label>名稱：
-      <input type="text" id="markerName" placeholder="輸入名稱">
-    </label>
-    <!-- 第二行：操作按鈕 -->
-    <div>
-      <button onclick="startStopTrack()">開始記錄</button>
-      <button onclick="saveGPX()">存 GPX</button>
-      <input type="file" id="gpxFile" accept=".gpx" onchange="loadGPX(event)">
-    </div>
+
+<div id="map"></div>
+
+<div class="slider-container">
+  <input type="range" id="zoomSlider" min="1" max="19">
+  <span id="zoomValue">12</span>
+</div>
+
+<div class="marker-panel">
+  <div class="panel-row">
+    <label for="markerColor">顏色:</label>
+    <select id="markerColor">
+      <option value="red">紅</option>
+      <option value="blue">藍</option>
+      <option value="green">綠</option>
+      <option value="orange">橙</option>
+      <option value="violet">紫</option>
+    </select>
+    <label for="markerName">名稱:</label>
+    <input type="text" id="markerName" placeholder="輸入名稱">
   </div>
+  <button id="trackBtn" class="track-btn">開始記錄</button>
+</div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/togeojson@0.16.0"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+const DEFAULT_LAT = 23.6978;
+const DEFAULT_LNG = 120.9605;
+const DEFAULT_ZOOM = 12;
 
-  <script>
-    let map = L.map('map').setView([23.5, 121], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap 貢獻者'
-    }).addTo(map);
+let map;
 
-    let userMarker;
-    let tracking = false;
-    let currentTrack = [];
-    let trackLayer = L.polyline([], { color: 'blue' }).addTo(map);
+// 顏色圖標對應
+const iconMap = {
+  red: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png',
+  blue: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png',
+  green: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png',
+  orange: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-orange.png',
+  violet: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-violet.png'
+};
 
-    // ---- 定位 ----
-    if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(
-        pos => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const latlng = [lat, lng];
+function createIcon(color, name) {
+  return L.divIcon({
+    html: `<div style="text-align:center;">
+            <img src="${iconMap[color]}" style="display:block; margin:0 auto;">
+            <span style="color:${color}; font-weight:bold;">${name}</span>
+           </div>`,
+    className: '',
+    iconSize: [40, 50],
+    iconAnchor: [20, 41],
+    popupAnchor: [0, -41]
+  });
+}
 
-          if (!userMarker) {
-            userMarker = L.marker(latlng).addTo(map).bindPopup("目前位置");
-            map.setView(latlng, 16);
-          } else {
-            userMarker.setLatLng(latlng);
-          }
+// === 軌跡記錄相關 ===
+let tracking = false;
+let trackBtn;
+let watchId = null;
+let trackPolyline = null;
+let trackCoords = [];
 
-          if (tracking) {
-            currentTrack.push(latlng);
-            trackLayer.setLatLngs(currentTrack);
-          }
-        },
-        err => {
-          console.error("定位失敗：", err.message);
-          alert("定位失敗：" + err.message);
-        },
-        {
-          enableHighAccuracy: true,   // 優先用 GPS
-          timeout: 20000,             // 最多等 20 秒
-          maximumAge: 0               // 不要用快取
-        }
-      );
-    } else {
-      alert("此瀏覽器不支援定位功能");
-    }
+function toggleTracking() {
+  if (!navigator.geolocation) {
+    alert("此瀏覽器不支援 GPS 定位");
+    return;
+  }
 
-    // ---- 長按新增標記 ----
-    map.on('contextmenu', function (e) {
-      const color = document.getElementById("color").value;
-      const name = document.getElementById("markerName").value || "標記";
-      const marker = L.circleMarker(e.latlng, {
-        color: color,
-        radius: 8
-      }).addTo(map);
-      marker.bindPopup(`<b>${name}</b>`);
+  if (!tracking) {
+    // 開始記錄
+    tracking = true;
+    trackCoords = [];
+    trackPolyline = L.polyline([], { color: 'red' }).addTo(map);
+
+    watchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      const latlng = [latitude, longitude];
+      trackCoords.push(latlng);
+      trackPolyline.setLatLngs(trackCoords);
+      map.setView(latlng);
+    }, err => {
+      console.warn("GPS 錯誤:", err);
+    }, {
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 10000
     });
 
-    // ---- 開始/停止記錄 ----
-    function startStopTrack() {
-      tracking = !tracking;
-      if (tracking) {
-        currentTrack = [];
-        trackLayer.setLatLngs([]);
-        document.querySelector("button").innerText = "停止記錄";
-      } else {
-        document.querySelector("button").innerText = "開始記錄";
-      }
+    trackBtn.textContent = "停止記錄";
+    trackBtn.classList.add("active");
+
+  } else {
+    // 停止記錄
+    tracking = false;
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
     }
+    trackBtn.textContent = "開始記錄";
+    trackBtn.classList.remove("active");
+  }
+}
 
-    // ---- 匯出 GPX ----
-    function saveGPX() {
-      if (currentTrack.length === 0) {
-        alert("沒有軌跡可存檔！");
-        return;
-      }
+function initMap() {
+  map = L.map('map').setView([DEFAULT_LAT, DEFAULT_LNG], DEFAULT_ZOOM);
 
-      let gpx = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Leaflet">
-<trk><name>Track</name><trkseg>`;
-      currentTrack.forEach(pt => {
-        gpx += `<trkpt lat="${pt[0]}" lon="${pt[1]}"></trkpt>\n`;
-      });
-      gpx += `</trkseg></trk></gpx>`;
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(map);
 
-      const blob = new Blob([gpx], { type: "application/gpx+xml" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "track.gpx";
-      a.click();
-    }
+  const zoomSlider = document.getElementById('zoomSlider');
+  const zoomValue = document.getElementById('zoomValue');
 
-    // ---- 匯入 GPX ----
-    function loadGPX(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(e.target.result, "text/xml");
-        const geojson = toGeoJSON.gpx(xml);
-        L.geoJSON(geojson, { style: { color: "red" } }).addTo(map);
-      };
-      reader.readAsText(file);
-    }
-  </script>
+  zoomSlider.value = DEFAULT_ZOOM;
+  zoomValue.textContent = DEFAULT_ZOOM;
+
+  zoomSlider.addEventListener('input', () => {
+    const val = parseInt(zoomSlider.value);
+    map.setZoom(val);
+    zoomValue.textContent = val;
+  });
+
+  map.on('zoomend', () => {
+    const val = map.getZoom();
+    zoomSlider.value = val;
+    zoomValue.textContent = val;
+  });
+
+  // GPS 定位
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude, longitude } = pos.coords;
+      map.setView([latitude, longitude], DEFAULT_ZOOM);
+      L.marker([latitude, longitude], {icon: createIcon('blue', '你在這裡')})
+        .addTo(map);
+    }, () => {
+      console.warn('無法獲取定位，使用預設位置');
+    });
+  }
+
+  // contextmenu → 桌機右鍵 / 手機長按
+  map.on('contextmenu', function(e) {
+    const nameInput = document.getElementById('markerName').value || '新標記';
+    const colorSelect = document.getElementById('markerColor').value || 'red';
+    L.marker(e.latlng, {icon: createIcon(colorSelect, nameInput)})
+      .addTo(map);
+  });
+
+  // 綁定軌跡記錄按鈕
+  trackBtn = document.getElementById("trackBtn");
+  trackBtn.addEventListener("click", toggleTracking);
+}
+
+window.onload = initMap;
+</script>
+
 </body>
 </html>
