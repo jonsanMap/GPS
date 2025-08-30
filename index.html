@@ -69,6 +69,37 @@ html, body { margin:0; padding:0; height:100%; }
 .track-btn.active {
   background:#dc3545; /* 紅色表示停止狀態 */
 }
+  .round-btn {
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 20px; /* 大圓角 */
+  padding: 6px 10px;
+  font-size: 0.8rem; /* 小字體 */
+  cursor: pointer;
+  flex: 1; /* 平分空間 */
+  min-width: 80px; /* 避免太小 */
+  text-align: center;
+}
+
+.round-btn.active {
+  background: #dc3545; /* 紅色表示停止 */
+}
+
+.round-btn-file {
+  border-radius: 20px;
+  font-size: 0.8rem;
+  padding: 6px 10px;
+  flex: 1;
+  min-width: 80px;
+  overflow: hidden;
+  text-align: center;
+}
+.panel-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
 </style>
 </head>
 <body>
@@ -93,11 +124,11 @@ html, body { margin:0; padding:0; height:100%; }
     <label for="markerName">名稱:</label>
     <input type="text" id="markerName" placeholder="輸入名稱">
   </div>
-  <div class="panel-row">
-    <button id="trackBtn" class="track-btn">開始記錄</button>
-    <button id="saveBtn">存 GPX</button>
-    <input type="file" id="gpxFile" accept=".gpx">
-  </div>
+<div class="panel-row">
+  <button id="trackBtn" class="round-btn">開始記錄</button>
+  <button id="saveBtn" class="round-btn">存 GPX</button>
+  <input type="file" id="gpxFile" class="round-btn-file" accept=".gpx">
+</div>
 </div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -277,3 +308,4 @@ window.onload = initMap;
 
 </body>
 </html>
+
